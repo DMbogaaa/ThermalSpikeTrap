@@ -31,9 +31,9 @@ interface ITrap {
     function shouldRespond(bytes[] calldata data) external pure returns (bool, bytes memory);
 }
 
-/// @title ThermalSpikeTrap — triggers on basefee OR gaslimit changes >1%
+/// @title ThermalSpikeTrap — triggers on basefee AND gaslimit changes > 1%
 contract ThermalSpikeTrap is ITrap {
-    uint256 private constant CHANGE_THRESHOLD_PERCENT = 1; // сниженный порог
+    uint256 private constant CHANGE_THRESHOLD_PERCENT = 1;
 
     function collect() external view override returns (bytes memory) {
         return abi.encode(block.basefee, block.gaslimit);
@@ -54,20 +54,29 @@ contract ThermalSpikeTrap is ITrap {
         uint256 basefeeChange = _percentChange(currentBasefee, previousBasefee);
         uint256 gaslimitChange = _percentChange(currentGaslimit, previousGaslimit);
 
-        // ИЛИ вместо И — срабатывает если хотя бы один параметр изменился более чем на 1%
-        if (basefeeChange > CHANGE_THRESHOLD_PERCENT || gaslimitChange > CHANGE_THRESHOLD_PERCENT) {
-            return (true, abi.encode("Thermal spike detected"));
-        }
+        bool triggered = basefeeChange > CHANGE_THRESHOLD_PERCENT && gaslimitChange > CHANGE_THRESHOLD_PERCENT;
 
-        return (false, abi.encode("No spike detected"));
+        bytes memory metadata = abi.encode(
+            "basefeeChange", basefeeChange,
+            "gaslimitChange", gaslimitChange,
+            "currentBasefee", currentBasefee,
+            "previousBasefee", previousBasefee,
+            "currentGaslimit", currentGaslimit,
+            "previousGaslimit", previousGaslimit
+        );
+
+        return (
+            triggered,
+            triggered
+                ? abi.encode("Thermal spike detected", metadata)
+                : abi.encode("No spike detected", metadata)
+        );
     }
 
     function _percentChange(uint256 current, uint256 previous) private pure returns (uint256) {
-        if (current > previous) {
-            return ((current - previous) * 100) / previous;
-        } else {
-            return ((previous - current) * 100) / previous;
-        }
+        if (previous == 0) return 0;
+        uint256 diff = current > previous ? current - previous : previous - current;
+        return (diff * 100) / previous;
     }
 }
 ```
